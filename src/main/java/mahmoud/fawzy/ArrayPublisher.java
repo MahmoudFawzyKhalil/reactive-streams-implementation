@@ -61,7 +61,6 @@ public class ArrayPublisher<T> implements Publisher<T> {
                 if (initialRequested > 0) {
                     return;
                 }
-
                 int sent = 0;
                 while (true) {
                     for (; sent < requested.get() && index.get() < array.length; sent++) {
@@ -83,22 +82,25 @@ public class ArrayPublisher<T> implements Publisher<T> {
 
                     if (canceled) return;
 
-                    // Finished sending, reset requested
-//                    requested.set(0); // If this completes after an Add from a competing thread, no one will send data anymore!
-                    // Must add -sent, can't just set to 0 because you have to re-get the requested field
-
-                    long currentRequested = requested.addAndGet(-sent);
-                    if (currentRequested == 0) {
-                        return; // otherwise, repeat while loop to steal work
-                    }
-
-                    sent = 0; // reset sent
-
                     if (index.get() == array.length && !completed) {
                         subscriber.onComplete();
                         completed = true;
                         return;
                     }
+
+                    long currentRequested = requested.addAndGet(-sent);
+                    if (currentRequested == 0) {
+                        return; // otherwise, repeat while loop to steal work
+                    }
+                    sent = 0;
+
+                    // If this completes after an Add from a competing thread, no one will send data anymore!
+                    // Must add -sent, can't just set to 0 because you have to re-get the requested field otherwise
+//                    requested.set(0);
+//                    long currentRequested = requested.get();
+//                    if (currentRequested == 0) {
+//                        return;
+//                    }
                 }
             }
 

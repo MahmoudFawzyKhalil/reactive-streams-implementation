@@ -1,20 +1,15 @@
 package mahmoud.fawzy;
 
-import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-public class ArrayPublisher<T> extends AbstractPublisher<T> {
+public class ArrayPublisher<T> extends Flow<T> {
     private final T[] array;
 
     public ArrayPublisher(T[] array) {
         this.array = array;
-    }
-
-    public static <T> ArrayPublisher<T> of(T... elements){
-        return new ArrayPublisher<>(elements);
     }
 
     @Override

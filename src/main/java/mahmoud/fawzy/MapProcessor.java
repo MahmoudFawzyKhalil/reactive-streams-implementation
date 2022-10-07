@@ -8,8 +8,7 @@ import org.reactivestreams.Subscription;
 import java.util.Objects;
 import java.util.function.Function;
 
-public class MapProcessor<IN, OUT> implements Processor<IN, OUT>, Subscription {
-
+public class MapProcessor<IN, OUT> extends Flow<OUT> implements Processor<IN, OUT>, Subscription {
 
     private final Publisher<? extends IN> upstreamPublisher;
     private final Function<IN, OUT> mapper;
@@ -70,7 +69,7 @@ public class MapProcessor<IN, OUT> implements Processor<IN, OUT>, Subscription {
 
     @Override
     public void onComplete() {
-        if (terminated) return;
+        if (terminated) return; // Terminated doesn't need to be volatile because it is only invoked serially in onNext onError onComplete according to spec and Publisher implementation
 
         // Forward signal to downstream Subscriber
         this.terminated = true;
@@ -80,8 +79,6 @@ public class MapProcessor<IN, OUT> implements Processor<IN, OUT>, Subscription {
     // Make ourselves a subscription in order to avoid creating a new subscription object
     @Override
     public void request(long l) {
-        if (terminated) return;
-
         this.subscriptionToUpstreamPublisher.request(l);
     }
 

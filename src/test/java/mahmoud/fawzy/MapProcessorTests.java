@@ -8,6 +8,7 @@ import org.reactivestreams.Subscription;
 import java.util.ArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.LongStream;
 
 import static java.util.concurrent.ForkJoinPool.commonPool;
@@ -24,9 +25,9 @@ class MapProcessorTests {
         long toRequest = 5L;
         Long[] array = generate(toRequest);
 
-        ArrayPublisher
-                .of(array)
+        Flow.fromArray(array)
                 .map(l -> "#" + l)
+                .map(Function.identity())
                 .subscribe(new Subscriber<>() {
                     @Override
                     public void onSubscribe(Subscription s) {

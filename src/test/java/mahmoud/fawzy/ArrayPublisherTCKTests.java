@@ -6,9 +6,9 @@ import org.reactivestreams.tck.TestEnvironment;
 
 import java.util.stream.LongStream;
 
-public class TCKTests extends PublisherVerification<Long> {
+public class ArrayPublisherTCKTests extends PublisherVerification<Long> {
 
-    public TCKTests(){
+    public ArrayPublisherTCKTests(){
         super(new TestEnvironment());
     }
 

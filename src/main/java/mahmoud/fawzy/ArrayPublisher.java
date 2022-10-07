@@ -19,11 +19,13 @@ public class ArrayPublisher<T> implements Publisher<T> {
         // Publisher is just a thin wrapper around subscription, subscription does all the work
         // So to debug Reactive Streams, put break points inside the for loop of subscription's request(..) method
         subscriber.onSubscribe(new Subscription() {
-            boolean canceled;
-            boolean completed;
-            AtomicInteger index = new AtomicInteger();
+            volatile boolean canceled;
+            volatile boolean completed;
+            int index; // Doesn't even need to be volatile because the requested field gets written after it and read before it, which is a volatile read and write so the happens-before guarantee means any changes to index are published to all other threads (acquire + release)
 
-            AtomicLong requested = new AtomicLong();
+            AtomicLong requested = new AtomicLong(); // We can use an atomic long field updater so that multiple publishers all use the same object, and just have primitive volatile long s
+
+            // We can also do a fastpath and slowpath optimization if someone requests Long.MAX_VALUE
 
             // request method can be called from any number of threads concurrently, it SHOULD be non-blocking
             @Override
@@ -57,16 +59,17 @@ public class ArrayPublisher<T> implements Publisher<T> {
                 } while (!requested.compareAndSet(initialRequested, newRequested));
 
 
-                // If there's already work in progress return
+                // If there's already work in progress, return (WIP guard, only one thread may pass)
                 if (initialRequested > 0) {
                     return;
                 }
+
                 int sent = 0;
                 while (true) {
-                    for (; sent < requested.get() && index.get() < array.length; sent++) {
+                    for (; sent < n && index < array.length; sent++) {
                         if (canceled) return;
 
-                        T element = array[index.get()];
+                        T element = array[index];
 
                         if (element == null) {
                             subscriber.onError(new NullPointerException());
@@ -77,12 +80,12 @@ public class ArrayPublisher<T> implements Publisher<T> {
                         // All signals must be serialized,
                         // you can't have two simultaneous invocations of onNext(), or any two signals concurrently
                         // otherwise the complexity of handling concurrency falls on the shoulder of the subscriber
-                        index.incrementAndGet();
+                        index++;
                     }
 
                     if (canceled) return;
 
-                    if (index.get() == array.length && !completed) {
+                    if (index == array.length && !completed) {
                         subscriber.onComplete();
                         completed = true;
                         return;
@@ -92,6 +95,8 @@ public class ArrayPublisher<T> implements Publisher<T> {
                     if (currentRequested == 0) {
                         return; // otherwise, repeat while loop to steal work
                     }
+
+                    n = currentRequested;
                     sent = 0;
 
                     // If this completes after an Add from a competing thread, no one will send data anymore!

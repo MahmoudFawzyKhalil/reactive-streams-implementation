@@ -18,14 +18,14 @@ public class ArrayPublisherPerfTest {
     @Param({ "1000000" })
     public int times;
 
-    ArrayPublisherOptimized<Integer> arrayPublisherOptimized;
+    ArrayPublisher<Integer> arrayPublisherOptimized;
     ArrayPublisher<Integer> arrayPublisher;
 
     @Setup
     public void setup() {
         Integer[] array = new Integer[times];
         Arrays.fill(array, 777);
-        arrayPublisherOptimized = new ArrayPublisherOptimized<>(array);
+        arrayPublisherOptimized = new ArrayPublisher<>(array);
         arrayPublisher = new ArrayPublisher<>(array);
     }
 

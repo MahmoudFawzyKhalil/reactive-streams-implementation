@@ -21,7 +21,7 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
 public final class PerfSubscriber implements Subscriber<Object> {
-    final  Blackhole      bh;
+    final Blackhole bh;
 
     Subscription subscription;
 

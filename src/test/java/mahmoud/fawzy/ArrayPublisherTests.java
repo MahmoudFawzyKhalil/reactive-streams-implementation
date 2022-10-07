@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.LongStream;
 
+import static java.util.concurrent.ForkJoinPool.commonPool;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
@@ -117,7 +118,7 @@ class ArrayPublisherTests {
     @Test
     public void mustSendNPENormally() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
-        Long[] array = new Long[] { null };
+        Long[] array = new Long[]{null};
         AtomicReference<Throwable> error = new AtomicReference<>();
         ArrayPublisher<Long> publisher = new ArrayPublisher<>(array);
 
@@ -222,6 +223,47 @@ class ArrayPublisherTests {
         assertThat(latch.await(1, SECONDS)).isFalse();
 
         assertThat(collected).isEmpty();
+    }
+
+    @Test
+    public void multithreadingTest() throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(1);
+        ArrayList<Long> collected = new ArrayList<>();
+        final int n = 5000;
+        Long[] array = generate(n);
+        ArrayPublisher<Long> publisher = new ArrayPublisher<>(array);
+
+        publisher.subscribe(new Subscriber<Long>() {
+            private Subscription s;
+
+            @Override
+            public void onSubscribe(Subscription s) {
+                this.s = s;
+                for (int i = 0; i < n; i++) {
+                    commonPool().execute(() -> s.request(1));
+                    // Multiple threads calling request() at the same time
+                }
+            }
+
+            @Override
+            public void onNext(Long aLong) {
+                collected.add(aLong);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+
+            }
+
+            @Override
+            public void onComplete() {
+                latch.countDown();
+            }
+        });
+
+        latch.await(2, SECONDS);
+
+        Assertions.assertThat(collected).hasSize(n);
     }
 
     static Long[] generate(long num) {

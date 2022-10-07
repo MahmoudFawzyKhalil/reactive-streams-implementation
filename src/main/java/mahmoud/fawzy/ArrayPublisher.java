@@ -4,6 +4,9 @@ import org.reactivestreams.Publisher;
 import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
 public class ArrayPublisher<T> implements Publisher<T> {
     private final T[] array;
 
@@ -18,55 +21,90 @@ public class ArrayPublisher<T> implements Publisher<T> {
         subscriber.onSubscribe(new Subscription() {
             boolean canceled;
             boolean completed;
-            int index = 0;
+            AtomicInteger index = new AtomicInteger();
 
-            long requested = 0;
+            AtomicLong requested = new AtomicLong();
 
+            // request method can be called from any number of threads concurrently, it SHOULD be non-blocking
             @Override
             public void request(long n) {
-                if (canceled) return;
-
                 if (n <= 0 && !canceled) {
                     cancel(); // Cancel to prevent sending onError signal multiple times
                     subscriber.onError(new IllegalArgumentException());
                 }
 
-                // If there's work in progress
-                if (requested > 0) {
-                    // Increment the work in progress and return to avoid StackOverflowError
-                    requested += n;
-                    return;
-                } else {
-                    // Add to the work in progress and start doing it
-                    requested += n;
-                }
+                if (canceled) return;
 
 
-                for (int i = 0; i < requested && index < array.length; i++) {
-                    if (canceled) return;
+//                long initialRequested = requested.getAndAdd(n); too simplistic, vulnerable to overflow
 
-                    T element = array[index];
+                long initialRequested;
+                long newRequested;
+                do {
+                    initialRequested = requested.get();
 
-                    if (element == null) {
-                        subscriber.onError(new NullPointerException());
+                    if (initialRequested == Long.MAX_VALUE) {
+                        // We are already sending data that would take 292 years to send
+                        // So just return, let the work stealing continue
                         return;
                     }
 
-                    subscriber.onNext(element);
-                    index++;
+                    newRequested = initialRequested + n;
+
+                    if (n <= 0) { // if overflow
+                        n = Long.MAX_VALUE;
+                    }
+                } while (!requested.compareAndSet(initialRequested, newRequested));
+
+
+                // If there's already work in progress return
+                if (initialRequested > 0) {
+                    return;
                 }
 
-                if (canceled) return;
+                int sent = 0;
+                while (true) {
+                    for (; sent < requested.get() && index.get() < array.length; sent++) {
+                        if (canceled) return;
 
-                // Finished sending, reset requested
-                requested = 0;
+                        T element = array[index.get()];
 
-                if (index == array.length && !completed) {
-                    subscriber.onComplete();
-                    completed = true;
+                        if (element == null) {
+                            subscriber.onError(new NullPointerException());
+                            return;
+                        }
+
+                        subscriber.onNext(element);
+                        // All signals must be serialized,
+                        // you can't have two simultaneous invocations of onNext(), or any two signals concurrently
+                        // otherwise the complexity of handling concurrency falls on the shoulder of the subscriber
+                        index.incrementAndGet();
+                    }
+
+                    if (canceled) return;
+
+                    // Finished sending, reset requested
+//                    requested.set(0); // If this completes after an Add from a competing thread, no one will send data anymore!
+                    // Must add -sent, can't just set to 0 because you have to re-get the requested field
+
+                    long currentRequested = requested.addAndGet(-sent);
+                    if (currentRequested == 0) {
+                        return; // otherwise, repeat while loop to steal work
+                    }
+
+                    sent = 0; // reset sent
+
+                    if (index.get() == array.length && !completed) {
+                        subscriber.onComplete();
+                        completed = true;
+                        return;
+                    }
                 }
             }
 
+            // cancel method MUST be non-blocking, imagine this is a WebSocketPublisher and we want to close the WebSocket
+            // a potentially long-running operation, so we want to perform it in a non-blocking manner
+            // ( don't block the calling thread of cancel() )
             @Override
             public void cancel() {
                 canceled = true;

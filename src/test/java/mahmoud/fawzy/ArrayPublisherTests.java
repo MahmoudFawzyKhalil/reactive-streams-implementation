@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.LongStream;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ArrayPublisherTests {
@@ -58,8 +59,8 @@ class ArrayPublisherTests {
 
         latch.await(1, SECONDS);
 
-        Assertions.assertThat(order).containsExactly(0, 1, 2);
-        Assertions.assertThat(collected).containsExactly(array);
+        assertThat(order).containsExactly(0, 1, 2);
+        assertThat(collected).containsExactly(array);
     }
 
     @Test
@@ -95,22 +96,22 @@ class ArrayPublisherTests {
         });
 
 
-        Assertions.assertThat(collected).isEmpty();
+        assertThat(collected).isEmpty();
 
         subscription[0].request(1);
-        Assertions.assertThat(collected).containsExactly(0L);
+        assertThat(collected).containsExactly(0L);
 
         subscription[0].request(1);
-        Assertions.assertThat(collected).containsExactly(0L, 1L);
+        assertThat(collected).containsExactly(0L, 1L);
 
         subscription[0].request(2);
-        Assertions.assertThat(collected).containsExactly(0L, 1L, 2L, 3L);
+        assertThat(collected).containsExactly(0L, 1L, 2L, 3L);
 
         subscription[0].request(20);
 
-        Assertions.assertThat(latch.await(1, SECONDS)).isTrue();
+        assertThat(latch.await(1, SECONDS)).isTrue();
 
-        Assertions.assertThat(collected).containsExactly(array);
+        assertThat(collected).containsExactly(array);
     }
 
     @Test
@@ -143,7 +144,7 @@ class ArrayPublisherTests {
 
         latch.await(1, SECONDS);
 
-        Assertions.assertThat(error.get()).isInstanceOf(NullPointerException.class);
+        assertThat(error.get()).isInstanceOf(NullPointerException.class);
     }
 
     @Test
@@ -183,9 +184,45 @@ class ArrayPublisherTests {
 
         latch.await(5, SECONDS);
 
-        Assertions.assertThat(collected).containsExactly(array);
+        assertThat(collected).containsExactly(array);
     }
 
+    @Test
+    public void shouldBePossibleToCancelSubscription() throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(1);
+        ArrayList<Long> collected = new ArrayList<>();
+        long toRequest = 1000L;
+        Long[] array = generate(toRequest);
+        ArrayPublisher<Long> publisher = new ArrayPublisher<>(array);
+
+        publisher.subscribe(new Subscriber<Long>() {
+
+            @Override
+            public void onSubscribe(Subscription s) {
+                s.cancel();
+                s.request(toRequest);
+            }
+
+            @Override
+            public void onNext(Long aLong) {
+                collected.add(aLong);
+            }
+
+            @Override
+            public void onError(Throwable t) {
+
+            }
+
+            @Override
+            public void onComplete() {
+                latch.countDown();
+            }
+        });
+
+        assertThat(latch.await(1, SECONDS)).isFalse();
+
+        assertThat(collected).isEmpty();
+    }
 
     static Long[] generate(long num) {
         return LongStream.range(0, num >= Integer.MAX_VALUE ? 1000000 : num)

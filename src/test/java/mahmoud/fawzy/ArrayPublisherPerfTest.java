@@ -19,14 +19,14 @@ public class ArrayPublisherPerfTest {
     public int times;
 
     ArrayPublisher<Integer> arrayPublisherOptimized;
-    ArrayPublisher<Integer> arrayPublisher;
+    ArrayPublisherUnoptimized<Integer> arrayPublisher;
 
     @Setup
     public void setup() {
         Integer[] array = new Integer[times];
         Arrays.fill(array, 777);
         arrayPublisherOptimized = new ArrayPublisher<>(array);
-        arrayPublisher = new ArrayPublisher<>(array);
+        arrayPublisher = new ArrayPublisherUnoptimized<>(array);
     }
 
     @Benchmark
